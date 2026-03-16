@@ -1,7 +1,6 @@
 use crate::writer::{FlashOptions, FlashProgress, FlashResult};
+#[cfg(target_os = "windows")]
 use std::process::{Command, Stdio};
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tauri::AppHandle;
@@ -323,6 +322,7 @@ fn format_usb_drive(disk_number: u32, options: &FlashOptions) -> Result<(String,
 
 #[cfg(target_os = "windows")]
 fn write_uefi_ntfs(fat_letter: &str) -> Result<(), String> {
+    use std::io::Write;
     use std::os::windows::io::FromRawHandle;
     use windows::Win32::System::Ioctl::{FSCTL_LOCK_VOLUME, FSCTL_DISMOUNT_VOLUME, FSCTL_UNLOCK_VOLUME};
     use windows::Win32::System::IO::DeviceIoControl;
@@ -491,7 +491,7 @@ fn copy_files_robocopy(app: &AppHandle, source: &str, dest: &str, total_bytes: u
                             } else {
                                 // It might be a new file line. Format with /BYTES: Status | Size | Path
                                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                                for (i, part) in parts.iter().enumerate() {
+                                for (_i, part) in parts.iter().enumerate() {
                                     if let Ok(size) = part.parse::<u64>() {
                                         // A new file has started. If we missed the 100% of the previous one,
                                         // add it to finished files now just in case.

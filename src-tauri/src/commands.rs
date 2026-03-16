@@ -66,7 +66,12 @@ fn check_admin_status() -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
+fn check_admin_status() -> bool {
+    unsafe { libc::geteuid() == 0 }
+}
+
+#[cfg(target_os = "macos")]
 fn check_admin_status() -> bool {
     unsafe { libc::geteuid() == 0 }
 }

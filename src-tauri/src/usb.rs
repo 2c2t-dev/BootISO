@@ -181,7 +181,7 @@ pub fn list_usb_devices() -> Result<Vec<UsbDevice>, String> {
         .output()
         .map_err(|e| format!("Failed to run diskutil: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
     let mut devices = Vec::new();
 
     // Parse plist output - look for disk identifiers
