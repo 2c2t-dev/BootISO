@@ -33,6 +33,8 @@ fn format_size(bytes: u64) -> String {
 
 #[cfg(target_os = "windows")]
 pub fn list_usb_devices() -> Result<Vec<UsbDevice>, String> {
+    use std::os::windows::process::CommandExt;
+    
     // Use PowerShell to get removable drives via WMI
     let output = Command::new("powershell")
         .args([
@@ -56,6 +58,7 @@ pub fn list_usb_devices() -> Result<Vec<UsbDevice>, String> {
             }
             "#,
         ])
+        .creation_flags(0x08000000)
         .output()
         .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
 

@@ -59,8 +59,10 @@ pub struct PlatformInfo {
 #[cfg(target_os = "windows")]
 fn check_admin_status() -> bool {
     use std::process::Command;
+    use std::os::windows::process::CommandExt;
     Command::new("net")
         .args(["session"])
+        .creation_flags(0x08000000)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)

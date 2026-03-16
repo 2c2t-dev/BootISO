@@ -1,10 +1,16 @@
 use crate::writer::{FlashOptions, FlashProgress, FlashResult};
 #[cfg(target_os = "windows")]
 use std::process::{Command, Stdio};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tauri::AppHandle;
 use tauri::Emitter;
+
+// CREATE_NO_WINDOW: prevents PowerShell/diskpart windows from popping up
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
 
@@ -163,6 +169,7 @@ fn mount_iso(iso_path: &str) -> Result<String, String> {
 
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("Failed to execute Mount PowerShell: {}", e))?;
 
@@ -186,6 +193,7 @@ fn unmount_iso(iso_path: &str) -> Result<(), String> {
     let script = format!(r#"Dismount-DiskImage -ImagePath "{}""#, iso_path);
     Command::new("powershell")
         .args(["-NoProfile", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("Failed to dismount ISO: {}", e))?;
     Ok(())
@@ -207,113 +215,125 @@ fn format_usb_drive(disk_number: u32, options: &FlashOptions) -> Result<(String,
     let is_gpt = options.partition_scheme.as_deref().unwrap_or("mbr").eq_ignore_ascii_case("gpt");
     let label = options.volume_label.as_deref().unwrap_or("BOOTISO");
 
+    // Create a temporary file for the diskpart script
+    let temp_dir = std::env::temp_dir();
+    let script_path = temp_dir.join(format!("bootiso_diskpart_{}.txt", disk_number));
+
     if is_gpt {
-        // ===== GPT: Use PowerShell for reliable GPT partitioning =====
-        let ps_script = format!(
-            r#"
-            $ErrorActionPreference = 'Stop'
-            # 1. Clean and initialize disk as GPT
-            Clear-Disk -Number {disk} -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
-            Initialize-Disk -Number {disk} -PartitionStyle GPT -Confirm:$false -ErrorAction SilentlyContinue
-            
-            # 2. Create main partition (leave 1MB at end for UEFI:NTFS)
-            $mainPart = New-Partition -DiskNumber {disk} -UseMaximumSize -AssignDriveLetter
-            
-            while (!(Get-Volume -DriveLetter $mainPart.DriveLetter -ErrorAction SilentlyContinue)) {{
-                Start-Sleep -Milliseconds 500
-            }}
-            Format-Volume -Partition $mainPart -FileSystem {fs} -NewFileSystemLabel "{label}" -Confirm:$false | Out-Null
-            
-            # 3. Shrink main partition by 1MB to make room for UEFI:NTFS
-            $newSize = $mainPart.Size - 1MB
-            Resize-Partition -DiskNumber {disk} -PartitionNumber $mainPart.PartitionNumber -Size $newSize
-            
-            # 4. Create small FAT partition in the freed space
-            $fatPart = New-Partition -DiskNumber {disk} -UseMaximumSize -AssignDriveLetter
-            
-            # 5. Wait for the volume to be available before formatting to avoid race conditions
-            while (!(Get-Volume -DriveLetter $fatPart.DriveLetter -ErrorAction SilentlyContinue)) {{
-                Start-Sleep -Milliseconds 500
-            }}
-            Format-Volume -Partition $fatPart -FileSystem FAT -NewFileSystemLabel "UEFI_NTFS" -Confirm:$false | Out-Null
-            
-            # 6. Output both drive letters (main first, fat second)
-            Write-Output $mainPart.DriveLetter
-            Write-Output $fatPart.DriveLetter
-            "#,
-            disk = disk_number,
-            fs = fs_cmd,
-            label = label
+        let diskpart_script = format!(
+            "select disk {}\nclean\nconvert gpt\ncreate partition primary\nshrink desired=2 minimum=2\nformat fs={} label=\"{}\" quick\nassign\ncreate partition primary\nformat fs=fat label=\"UEFI_NTFS\" quick\nassign\nexit\n",
+            disk_number, fs_cmd, label
         );
 
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_script])
+        std::fs::write(&script_path, diskpart_script)
+            .map_err(|e| format!("Failed to write diskpart script: {}", e))?;
+
+        let output = Command::new("diskpart")
+            .args(["/s", script_path.to_str().unwrap()])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
-            .map_err(|e| format!("Failed to execute PowerShell GPT format: {}", e))?;
+            .map_err(|e| format!("Failed to execute diskpart (GPT): {}", e))?;
+
+        let _ = std::fs::remove_file(&script_path);
 
         if !output.status.success() {
             return Err(format!(
-                "Failed to format USB drive (GPT) via PowerShell: {}",
-                String::from_utf8_lossy(&output.stderr)
+                "Diskpart GPT format failed: {}",
+                String::from_utf8_lossy(&output.stdout) // diskpart usually outputs errors to stdout
             ));
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = stdout.trim().lines().collect();
-        if lines.len() >= 2 {
-            let main_letter = lines[lines.len() - 2].trim().to_string();
-            let fat_letter = lines[lines.len() - 1].trim().to_string();
+        // Retrieve the two assigned drive letters using PowerShell since diskpart output parsing is frail
+        // We look for volumes on this specific disk
+        let get_letters_script = format!(
+            r#"
+            $letters = Get-Partition -DiskNumber {} | Where-Object DriveLetter | Select-Object -ExpandProperty DriveLetter
+            $letters -join "`n"
+            "#,
+            disk_number
+        );
+        
+        let letters_output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &get_letters_script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to get drive letters: {}", e))?;
+            
+        let letters_str = String::from_utf8_lossy(&letters_output.stdout);
+        let mut letters: Vec<&str> = letters_str.trim().lines().collect();
+        letters.sort(); // Main partition is usually larger/first, but let's assume alphabetical if we must, or we can check labels.
+        
+        // Better: get letters by Label to be 100% sure
+        let get_letters_by_label = format!(
+            r#"
+            $main = Get-Partition -DiskNumber {0} | Get-Volume | Where-Object FileSystemLabel -eq '{1}' | Select-Object -ExpandProperty DriveLetter
+            $fat = Get-Partition -DiskNumber {0} | Get-Volume | Where-Object FileSystemLabel -eq 'UEFI_NTFS' | Select-Object -ExpandProperty DriveLetter
+            Write-Output $main
+            Write-Output $fat
+            "#,
+            disk_number, label
+        );
+        
+        let precise_output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &get_letters_by_label])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to get precise drive letters: {}", e))?;
+            
+        let precise_str = String::from_utf8_lossy(&precise_output.stdout);
+        let precise_lines: Vec<&str> = precise_str.trim().lines().collect();
+        
+        if precise_lines.len() >= 2 {
+            let main_letter = precise_lines[0].trim().to_string();
+            let fat_letter = precise_lines[1].trim().to_string();
             Ok((format!("{}:\\", main_letter), Some(format!("{}:\\", fat_letter))))
         } else {
             Err(format!(
-                "GPT format succeeded but could not find two drive letters. Output: {}",
-                stdout
+                "GPT format succeeded but could not verify both partition letters via WMI. Output: {}",
+                precise_str
             ))
         }
+
     } else {
-        // ===== MBR: Use PowerShell (more reliable than diskpart) =====
-        let ps_script = format!(
-            r#"
-            $ErrorActionPreference = 'Stop'
-            # 1. Clean disk
-            Clear-Disk -Number {disk} -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
-            
-            # 2. Force MBR partition style
-            Set-Disk -Number {disk} -PartitionStyle MBR -ErrorAction SilentlyContinue
-            Initialize-Disk -Number {disk} -PartitionStyle MBR -ErrorAction SilentlyContinue
-            
-            # 3. Create main partition and make it active
-            $mainPart = New-Partition -DiskNumber {disk} -UseMaximumSize -IsActive -AssignDriveLetter
-            Format-Volume -Partition $mainPart -FileSystem {fs} -NewFileSystemLabel "{label}" -Confirm:$false | Out-Null
-            
-            # 4. Output drive letter
-            Write-Output $mainPart.DriveLetter
-            "#,
-            disk = disk_number,
-            fs = fs_cmd,
-            label = label
+        // ===== MBR: Use diskpart =====
+        let diskpart_script = format!(
+            "select disk {}\nclean\nconvert mbr\ncreate partition primary\nactive\nformat fs={} label=\"{}\" quick\nassign\nexit\n",
+            disk_number, fs_cmd, label
         );
 
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_script])
+        std::fs::write(&script_path, diskpart_script)
+            .map_err(|e| format!("Failed to write diskpart script: {}", e))?;
+
+        let output = Command::new("diskpart")
+            .args(["/s", script_path.to_str().unwrap()])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
-            .map_err(|e| format!("Failed to execute PowerShell MBR format: {}", e))?;
+            .map_err(|e| format!("Failed to execute diskpart (MBR): {}", e))?;
+
+        let _ = std::fs::remove_file(&script_path);
 
         if !output.status.success() {
             return Err(format!(
-                "Failed to format USB drive (MBR) via PowerShell: {}",
-                String::from_utf8_lossy(&output.stderr)
+                "Diskpart MBR format failed: {}",
+                String::from_utf8_lossy(&output.stdout)
             ));
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let letter = stdout.trim().to_string();
+        let get_letter_script = format!(
+            "(Get-Partition -DiskNumber {} | Where-Object DriveLetter | Select-Object -First 1).DriveLetter",
+            disk_number
+        );
+        
+        let letter_output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &get_letter_script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to get MBR drive letter: {}", e))?;
+            
+        let letter = String::from_utf8_lossy(&letter_output.stdout).trim().to_string();
         
         if letter.is_empty() {
-            return Err(format!(
-                "MBR format succeeded but could not find drive letter. Output: {}",
-                stdout
-            ));
+            return Err("MBR format succeeded but could not find drive letter.".to_string());
         }
 
         Ok((format!("{}:\\", letter), None))
@@ -435,6 +455,7 @@ fn copy_files_robocopy(app: &AppHandle, source: &str, dest: &str, total_bytes: u
     // We use /E instead of /MIR. We removed /NP to allow percentage tracking.
     let mut child = Command::new("robocopy")
         .args([source, dest, "/E", "/MT:16", "/J", "/R:0", "/W:0", "/BYTES", "/NDL", "/NJH", "/NJS", "/FP"])
+        .creation_flags(CREATE_NO_WINDOW)
         .stdout(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to start robocopy: {}", e))?;
@@ -569,6 +590,7 @@ fn install_bootloader(iso_letter: &str, usb_letter: &str) -> Result<(), String> 
 
     let output = Command::new(&bootsect_path)
         .args(["/nt60", &target, "/force", "/mbr"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
 
     match output {

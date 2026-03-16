@@ -2,8 +2,6 @@ name: "Release"
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
   # Allows you to run this workflow manually from the Actions tab
@@ -40,10 +38,10 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Setup Node
+      - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: "npm"
 
       - name: Install dependencies (Ubuntu only)
@@ -59,6 +57,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           tagName: v__VERSION__ # The action automatically replaces \_\_VERSION\_\_ with the app version
           releaseName: "BootISO v__VERSION__"

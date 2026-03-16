@@ -12,6 +12,9 @@
   cursor: pointer;
   transition: all var(--transition-normal);
   background: transparent;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
 }
 
 .iso-dropzone:hover {

@@ -373,6 +373,7 @@ fn format_iso_size(bytes: u64) -> String {
 #[cfg(target_os = "windows")]
 fn open_device_for_writing(device_path: &str) -> Result<File, String> {
     use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::process::CommandExt;
 
     // Use PowerShell to clear the disk first to prevent Windows "Access Denied" (os error 5)
     // when writing raw bytes to a disk that has mounted volumes.
@@ -389,6 +390,7 @@ fn open_device_for_writing(device_path: &str) -> Result<File, String> {
         );
         let _ = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &script])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output();
         // Give Windows a moment to unmount everything
         std::thread::sleep(std::time::Duration::from_millis(1500));
