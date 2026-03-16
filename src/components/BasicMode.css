@@ -1,0 +1,45 @@
+.basic-steps {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.basic-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  transition: all var(--transition-normal);
+  opacity: 0.4;
+}
+
+.basic-step.done {
+  opacity: 1;
+}
+
+.basic-step.current {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  opacity: 1;
+}
+
+.basic-step-num {
+  font-size: 16px;
+}
+
+.basic-step-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.basic-step.current .basic-step-label {
+  color: var(--accent-blue);
+}

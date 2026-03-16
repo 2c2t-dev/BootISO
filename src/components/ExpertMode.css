@@ -1,0 +1,18 @@
+.expert-mode {
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.expert-mode:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+.expert-mode .card-title {
+  color: var(--accent-violet);
+}
+
+.expert-checkboxes {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -1,0 +1,111 @@
+
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.card-title-row .card-title {
+  margin-bottom: 0;
+}
+
+.usb-refresh-btn {
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+}
+
+/* Empty state */
+.usb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+}
+
+.usb-empty-icon {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.usb-empty-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.usb-empty-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Device list */
+.usb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usb-device {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.usb-device:hover {
+  border-color: rgba(100, 100, 180, 0.3);
+  background: var(--bg-card-hover);
+}
+
+.usb-device.selected {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+}
+
+.usb-device:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.usb-device-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.usb-device.selected .usb-device-icon {
+  color: var(--accent-blue);
+}
+
+.usb-device-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.usb-device-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usb-device-size {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}

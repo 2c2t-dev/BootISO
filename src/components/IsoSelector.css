@@ -1,0 +1,128 @@
+
+
+.iso-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 20px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: transparent;
+}
+
+.iso-dropzone:hover {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+}
+
+.iso-dropzone.drag-over {
+  border-color: var(--accent-blue);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.iso-dropzone.loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.iso-dropzone-icon {
+  color: var(--text-muted);
+  transition: color var(--transition-normal);
+}
+
+.iso-dropzone:hover .iso-dropzone-icon {
+  color: var(--accent-blue);
+}
+
+.iso-dropzone-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.iso-dropzone-text strong {
+  color: var(--accent-blue);
+}
+
+.iso-dropzone-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.iso-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ISO Info Display */
+.iso-info {
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+.iso-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.iso-info-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.iso-change-btn {
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+}
+
+.iso-info-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.iso-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.iso-detail-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.iso-detail-value {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+
+.iso-valid {
+  margin-top: 10px;
+}
